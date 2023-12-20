@@ -6,10 +6,7 @@ import com.example.democloud.exception.FileWriteException;
 import com.example.democloud.exception.GCPFileUploadException;
 import com.example.democloud.exception.InvalidFileTypeException;
 import com.google.auth.oauth2.GoogleCredentials;
-import com.google.cloud.storage.Blob;
-import com.google.cloud.storage.Bucket;
-import com.google.cloud.storage.Storage;
-import com.google.cloud.storage.StorageOptions;
+import com.google.cloud.storage.*;
 import net.bytebuddy.utility.RandomString;
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
@@ -42,8 +39,7 @@ public class DataBucketUtil {
 
     public FileDto uploadFile(MultipartFile multipartFile, String fileName, String contentType) {
 
-        try{
-
+        try {
             LOGGER.debug("Start file uploading process on GCS");
             byte[] fileData = FileUtils.readFileToByteArray(convertFile(multipartFile));
 
@@ -53,17 +49,18 @@ public class DataBucketUtil {
                     .setCredentials(GoogleCredentials.fromStream(inputStream)).build();
 
             Storage storage = options.getService();
-            Bucket bucket = storage.get(gcpBucketId,Storage.BucketGetOption.fields());
+            Bucket bucket = storage.get(gcpBucketId, Storage.BucketGetOption.fields());
 
             RandomString id = new RandomString(6, ThreadLocalRandom.current());
             Blob blob = bucket.create(gcpDirectoryName + "/" + fileName + "-" + id.nextString() + checkFileExtension(fileName), fileData, contentType);
-
-            if(blob != null){
+            if (blob != null) {
                 LOGGER.debug("File successfully uploaded to GCS");
-                return new FileDto(blob.getName(), blob.getMediaLink());
+                // Отримуємо URL для об'єкта
+                String publicUrl = "https://storage.googleapis.com/" + gcpBucketId + "/" + blob.getName();
+                return new FileDto(blob.getName(), publicUrl);
             }
 
-        }catch (Exception e){
+        } catch (Exception e) {
             LOGGER.error("An error occurred while uploading data. Exception: ", e);
             throw new GCPFileUploadException("An error occurred while storing data to GCS");
         }
@@ -72,8 +69,8 @@ public class DataBucketUtil {
 
     private File convertFile(MultipartFile file) {
 
-        try{
-            if(file.getOriginalFilename() == null){
+        try {
+            if (file.getOriginalFilename() == null) {
                 throw new BadRequestException("Original file name is null");
             }
             File convertedFile = new File(file.getOriginalFilename());
@@ -82,16 +79,16 @@ public class DataBucketUtil {
             outputStream.close();
             LOGGER.debug("Converting multipart file : {}", convertedFile);
             return convertedFile;
-        }catch (Exception e){
+        } catch (Exception e) {
             throw new FileWriteException("An error has occurred while converting the file");
         }
     }
 
     private String checkFileExtension(String fileName) {
-        if(fileName != null && fileName.contains(".")){
-            String[] extensionList = {".png", ".jpeg", ".pdf", ".doc", ".mp3", ".jpg",  ".JPG"};
+        if (fileName != null && fileName.contains(".")) {
+            String[] extensionList = {".png", ".jpeg", ".pdf", ".doc", ".mp3", ".jpg", ".JPG"};
 
-            for(String extension: extensionList) {
+            for (String extension : extensionList) {
                 if (fileName.endsWith(extension)) {
                     LOGGER.debug("Accepted file type : {}", extension);
                     return extension;
